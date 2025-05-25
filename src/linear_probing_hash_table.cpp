@@ -1,10 +1,9 @@
-#include "linear_probing_hash_table.hpp"
+#include "../include/linear_probing_hash_table.hpp"
 #include<stdexcept>
 #include<mutex>
 #include <xxhash.h> 
 #include<iostream>
 template<typename KeyType,typename ValueType>
-requires Hashable<KeyType>
 LinearProbingHashTable<KeyType,ValueType>::LinearProbingHashTable(size_t initial_capacity,float load_factor):load_factor_(load_factor) {
     if(initial_capacity<=0||load_factor<=0.0f||load_factor>=1.0f){
         throw std::invalid_argument("Invalid capacity or load factor");
@@ -14,8 +13,8 @@ LinearProbingHashTable<KeyType,ValueType>::LinearProbingHashTable(size_t initial
 
 
 template<typename KeyType,typename ValueType>
-requires Hashable<KeyType>
 bool LinearProbingHashTable<KeyType,ValueType>::put(const KeyType& key,const ValueType& value){
+    if(key.empty()) return false;
     std::unique_lock lock(mutex_); // Exclusive write lock
     if (static_cast<float>(size_ + 1) / table_.size() > load_factor_) {
         resize();
@@ -23,7 +22,17 @@ bool LinearProbingHashTable<KeyType,ValueType>::put(const KeyType& key,const Val
 
     size_t index=find_slot(key);  
     // std::cout<<index<<" "<<table_.size()<<'\n';  
-    if(index==table_.size()) return false;
+    if(index==table_.size()) {
+        // try resizing as slots not available
+        resize();
+        index=find_slot(key);
+    }
+
+    if(index==table_.size()){
+        // if still can not put return false, but this will not be the case (most probably)
+        return false;
+    }
+
     if(!table_[index]){
         // nothing was stored at this index
         table_[index]=std::make_unique<HashEntry>();  // pointer that stores HashEntry
@@ -48,7 +57,6 @@ bool LinearProbingHashTable<KeyType,ValueType>::put(const KeyType& key,const Val
 }
 
 template<typename KeyType,typename ValueType>
-requires Hashable<KeyType>
 std::optional<ValueType> LinearProbingHashTable<KeyType,ValueType>::get(const KeyType& key) const{
     // multiple readers at a time allowed
     std::shared_lock lock(mutex_);
@@ -61,8 +69,8 @@ std::optional<ValueType> LinearProbingHashTable<KeyType,ValueType>::get(const Ke
 }
 
 template<typename KeyType,typename ValueType>
-requires Hashable<KeyType>
 bool LinearProbingHashTable<KeyType,ValueType>::remove(const KeyType& key) {
+    if(key.empty()) return false;
     std::unique_lock lock(mutex_); // only 1 writer allowed
     size_t index=find_slot(key);
     if (table_[index] && table_[index]->key == key && !table_[index]->is_deleted) {
@@ -74,16 +82,14 @@ bool LinearProbingHashTable<KeyType,ValueType>::remove(const KeyType& key) {
 } 
 
 template<typename KeyType, typename ValueType>
-requires Hashable<KeyType>
 size_t LinearProbingHashTable<KeyType, ValueType>::size() const {
     std::shared_lock lock(mutex_);  // readers are allowed, writers are not allowed so that size_ do not get changed
     return size_;
 }
 
 template<typename KeyType, typename ValueType>
-requires Hashable<KeyType>
 void LinearProbingHashTable<KeyType, ValueType>::resize() {
-    // Remove the unique_lock here; assume caller (put/remove) already holds it
+    // Remove the unique_lock here, assume caller (put/remove) already holds it
     std::vector<std::unique_ptr<HashEntry>> old_table = std::move(table_);
     table_.resize(old_table.size() * 2);
     size_ = 0;
@@ -109,10 +115,10 @@ void LinearProbingHashTable<KeyType, ValueType>::resize() {
 
 
 template<typename KeyType, typename ValueType>
-requires Hashable<KeyType>
 size_t LinearProbingHashTable<KeyType, ValueType>::find_slot(const KeyType& key) const {    
-    
-    size_t hash = XXH64(key.c_str(), key.size(), 0);
+    if(key.empty()) return false;
+    // size_t hash = XXH64(key.c_str(), key.size(), 0);
+    size_t hash = std::hash<KeyType>{}(key);
     size_t index = hash % table_.size();
     // now the step of linear probing
     size_t start_index=index;
@@ -126,4 +132,4 @@ size_t LinearProbingHashTable<KeyType, ValueType>::find_slot(const KeyType& key)
     return table_.size(); // Table is full
 }
 
-template class LinearProbingHashTable<std::string, std::string>;
+template class LinearProbingHashTable<std::string, VariantValueType>;

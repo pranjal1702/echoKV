@@ -5,21 +5,26 @@
 #include<string>
 #include<vector>
 #include<concepts>
+#include <variant>
 
-template<typename T>
-concept Hashable = requires(T a){
-    {std::hash<T>{}(a)} -> std::convertible_to<std::size_t>;
-};
+
+using VariantValueType = std::variant<
+    int,
+    float,
+    std::string,
+    std::vector<int>,
+    std::vector<float>,
+    std::vector<std::string>
+>;
 
 struct alignas(64) HashEntry{
     std::string key;
-    std:: string value;
+    VariantValueType value;
     bool is_deleted{false};
     HashEntry() = default;
 };
 
 template<typename KeyType,typename ValueType>
-requires Hashable<KeyType>
 class LinearProbingHashTable{
 public:
     explicit LinearProbingHashTable(size_t initial_capacity = 16, float load_factor = 0.75);
